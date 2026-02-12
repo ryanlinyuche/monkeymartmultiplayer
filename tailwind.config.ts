@@ -13,6 +13,10 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        display: ['Fredoka', 'sans-serif'],
+        body: ['Nunito', 'sans-serif'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -46,6 +50,18 @@ export default {
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
+        },
+        game: {
+          bg: "hsl(var(--game-bg))",
+          ground: "hsl(var(--game-ground))",
+          shelf: "hsl(var(--game-shelf))",
+          p1: "hsl(var(--game-p1))",
+          p2: "hsl(var(--game-p2))",
+          tree: "hsl(var(--game-tree))",
+          banana: "hsl(var(--game-fruit-banana))",
+          apple: "hsl(var(--game-fruit-apple))",
+          orange: "hsl(var(--game-fruit-orange))",
+          customer: "hsl(var(--game-customer))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
