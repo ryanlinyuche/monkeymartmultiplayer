@@ -4,7 +4,7 @@ export interface Position {
 }
 
 export interface Player {
-  id: number; // 1-4
+  id: number;
   pos: Position;
   carrying: FruitType | null;
   speed: number;
@@ -17,7 +17,7 @@ export type FruitType = 'banana' | 'apple' | 'orange';
 
 export interface Plot {
   pos: Position;
-  type: FruitType | null; // null = empty/purchasable
+  type: FruitType | null;
   growTimer: number;
   maxGrow: number;
   ready: boolean;
@@ -46,8 +46,6 @@ export interface Customer {
   served: boolean;
   leaving: boolean;
   atCashier: boolean;
-  patience: number;
-  maxPatience: number;
   speed: number;
   size: number;
 }
@@ -62,7 +60,7 @@ export interface GameState {
   customerInterval: number;
   gameTime: number;
   paused: boolean;
-  money: number; // shared money pool
+  money: number;
 }
 
 export interface Keys {

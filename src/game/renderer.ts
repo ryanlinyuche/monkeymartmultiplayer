@@ -1,11 +1,28 @@
-import { GameState } from './types';
+import { GameState, Position } from './types';
 import {
-  CANVAS_WIDTH, CANVAS_HEIGHT, FRUIT_EMOJI, FRUIT_PRICES,
-  PLAYER_BODY_COLORS, PLOT_COSTS,
+  CANVAS_WIDTH, CANVAS_HEIGHT, FRUIT_EMOJI,
+  PLAYER_BODY_COLORS,
 } from './constants';
 
-export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
-  // Clear - green grass
+const VIEW_WIDTH = 480;
+const VIEW_HEIGHT = 320;
+const SCALE = 2;
+
+export function renderGame(ctx: CanvasRenderingContext2D, state: GameState, localPlayerId: number) {
+  const canvasW = ctx.canvas.width;
+  const canvasH = ctx.canvas.height;
+
+  // Find local player for camera
+  const localPlayer = state.players.find(p => p.id === localPlayerId) || state.players[0];
+  const camX = localPlayer ? localPlayer.pos.x - VIEW_WIDTH / 2 : 0;
+  const camY = localPlayer ? localPlayer.pos.y - VIEW_HEIGHT / 2 : 0;
+
+  ctx.save();
+  ctx.clearRect(0, 0, canvasW, canvasH);
+  ctx.scale(SCALE, SCALE);
+  ctx.translate(-camX, -camY);
+
+  // Background grass
   ctx.fillStyle = '#7ab87a';
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -34,10 +51,9 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
   ctx.textAlign = 'center';
   ctx.fillText('🐒 MONKEY MART 🐒', CANVAS_WIDTH / 2, 38);
 
-  // Draw plots (fruit trees / buyable land)
+  // Draw plots
   for (const plot of state.plots) {
     if (!plot.purchased) {
-      // Unpurchased plot - show as buyable land
       ctx.fillStyle = '#a0d4a0';
       ctx.strokeStyle = '#6a9a6a';
       ctx.lineWidth = 2;
@@ -46,7 +62,6 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
       ctx.strokeRect(plot.pos.x - plot.size / 2, plot.pos.y - plot.size / 2, plot.size, plot.size);
       ctx.setLineDash([]);
 
-      // Cost label
       ctx.fillStyle = '#333';
       ctx.font = 'bold 12px Fredoka, sans-serif';
       ctx.textAlign = 'center';
@@ -57,7 +72,6 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
       ctx.font = '9px Nunito, sans-serif';
       ctx.fillText('PRESS E/SPACE', plot.pos.x, plot.pos.y + 28);
     } else {
-      // Purchased plot - tree
       ctx.fillStyle = '#8B4513';
       ctx.fillRect(plot.pos.x - 6, plot.pos.y - 5, 12, 20);
       ctx.fillStyle = plot.ready ? '#2d8a2d' : '#5a7a5a';
@@ -141,7 +155,6 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     ctx.fill();
 
     if (!customer.served && !customer.leaving) {
-      // Want bubble
       ctx.fillStyle = 'rgba(255,255,255,0.9)';
       ctx.beginPath();
       ctx.arc(customer.pos.x + 16, customer.pos.y - 20, 12, 0, Math.PI * 2);
@@ -149,22 +162,17 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
       ctx.font = '12px serif';
       ctx.textAlign = 'center';
       ctx.fillText(FRUIT_EMOJI[customer.wants], customer.pos.x + 16, customer.pos.y - 16);
-
-      // Patience bar
-      const ratio = customer.patience / customer.maxPatience;
-      ctx.fillStyle = '#333';
-      ctx.fillRect(customer.pos.x - 12, customer.pos.y + 16, 24, 3);
-      ctx.fillStyle = ratio > 0.5 ? '#4CAF50' : ratio > 0.2 ? '#ff9800' : '#f44336';
-      ctx.fillRect(customer.pos.x - 12, customer.pos.y + 16, 24 * ratio, 3);
     }
 
     if (customer.atCashier && !customer.served) {
       ctx.font = '12px serif';
+      ctx.textAlign = 'center';
       ctx.fillText('⏳', customer.pos.x, customer.pos.y - 18);
     }
 
     if (customer.served) {
       ctx.font = '14px serif';
+      ctx.textAlign = 'center';
       ctx.fillText('💰', customer.pos.x, customer.pos.y - 18);
     }
 
@@ -175,19 +183,16 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
   for (const player of state.players) {
     const bodyColor = PLAYER_BODY_COLORS[player.id - 1] || PLAYER_BODY_COLORS[0];
 
-    // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.15)';
     ctx.beginPath();
     ctx.ellipse(player.pos.x, player.pos.y + player.size / 2 + 2, player.size / 2, 5, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Body
     ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(player.pos.x, player.pos.y, player.size / 2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Ears
     ctx.beginPath();
     ctx.arc(player.pos.x - player.size / 2 + 2, player.pos.y - player.size / 3, 6, 0, Math.PI * 2);
     ctx.arc(player.pos.x + player.size / 2 - 2, player.pos.y - player.size / 3, 6, 0, Math.PI * 2);
@@ -198,13 +203,11 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     ctx.arc(player.pos.x + player.size / 2 - 2, player.pos.y - player.size / 3, 3, 0, Math.PI * 2);
     ctx.fill();
 
-    // Face
     ctx.fillStyle = '#dba87a';
     ctx.beginPath();
     ctx.ellipse(player.pos.x, player.pos.y + 2, 8, 7, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Eyes
     ctx.fillStyle = '#222';
     ctx.beginPath();
     ctx.arc(player.pos.x - 5, player.pos.y - 3, 2.5, 0, Math.PI * 2);
@@ -216,38 +219,36 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     ctx.arc(player.pos.x + 6, player.pos.y - 4, 1, 0, Math.PI * 2);
     ctx.fill();
 
-    // Smile
     ctx.strokeStyle = '#333';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(player.pos.x, player.pos.y + 3, 4, 0.1 * Math.PI, 0.9 * Math.PI);
     ctx.stroke();
 
-    // Player ring
     ctx.strokeStyle = player.color;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(player.pos.x, player.pos.y, player.size / 2 + 4, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Player label
     ctx.fillStyle = player.color;
     ctx.font = 'bold 11px Fredoka, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(player.name, player.pos.x, player.pos.y - player.size / 2 - 10);
 
-    // Carrying
     if (player.carrying) {
       ctx.font = '16px serif';
       ctx.fillText(FRUIT_EMOJI[player.carrying], player.pos.x, player.pos.y - player.size / 2 - 22);
     }
   }
 
-  // Money HUD on canvas
+  ctx.restore();
+
+  // HUD (drawn in screen space, not world space)
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(CANVAS_WIDTH - 130, 10, 120, 35);
+  ctx.fillRect(canvasW - 160, 10, 150, 40);
   ctx.fillStyle = '#f0d040';
-  ctx.font = 'bold 18px Fredoka, sans-serif';
+  ctx.font = 'bold 22px Fredoka, sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText(`💰 $${state.money}`, CANVAS_WIDTH - 20, 34);
+  ctx.fillText(`💰 $${state.money}`, canvasW - 20, 38);
 }
