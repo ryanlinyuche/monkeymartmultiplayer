@@ -1,12 +1,15 @@
 import { GameState } from './types';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, FRUIT_COLORS, FRUIT_EMOJI, FRUIT_PRICES } from './constants';
+import {
+  CANVAS_WIDTH, CANVAS_HEIGHT, FRUIT_EMOJI, FRUIT_PRICES,
+  PLAYER_BODY_COLORS, PLOT_COSTS,
+} from './constants';
 
 export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
-  // Clear
+  // Clear - green grass
   ctx.fillStyle = '#7ab87a';
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-  // Draw floor pattern
+  // Floor pattern
   ctx.fillStyle = '#6aaa6a';
   for (let x = 0; x < CANVAS_WIDTH; x += 64) {
     for (let y = 0; y < CANVAS_HEIGHT; y += 64) {
@@ -16,67 +19,82 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     }
   }
 
-  // Draw market area (center lighter area)
+  // Market area
   ctx.fillStyle = '#d4b88c';
-  ctx.fillRect(CANVAS_WIDTH / 2 - 200, 60, 400, 520);
+  ctx.fillRect(CANVAS_WIDTH / 2 - 220, 80, 440, 340);
   ctx.strokeStyle = '#b08a5a';
   ctx.lineWidth = 3;
-  ctx.strokeRect(CANVAS_WIDTH / 2 - 200, 60, 400, 520);
+  ctx.strokeRect(CANVAS_WIDTH / 2 - 220, 80, 440, 340);
 
   // Sign
   ctx.fillStyle = '#8B4513';
-  ctx.fillRect(CANVAS_WIDTH / 2 - 100, 10, 200, 40);
+  ctx.fillRect(CANVAS_WIDTH / 2 - 110, 10, 220, 40);
   ctx.fillStyle = '#f0d040';
-  ctx.font = 'bold 22px Fredoka, sans-serif';
+  ctx.font = 'bold 20px Fredoka, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('🐒 MONKEY MART 🐒', CANVAS_WIDTH / 2, 38);
 
-  // Draw fruit sources (trees)
-  for (const source of state.fruitSources) {
-    // Tree trunk
-    ctx.fillStyle = '#8B4513';
-    ctx.fillRect(source.pos.x - 6, source.pos.y - 5, 12, 20);
-    
-    // Tree top
-    ctx.fillStyle = source.ready ? '#2d8a2d' : '#5a7a5a';
-    ctx.beginPath();
-    ctx.arc(source.pos.x, source.pos.y - 15, source.size / 2, 0, Math.PI * 2);
-    ctx.fill();
+  // Draw plots (fruit trees / buyable land)
+  for (const plot of state.plots) {
+    if (!plot.purchased) {
+      // Unpurchased plot - show as buyable land
+      ctx.fillStyle = '#a0d4a0';
+      ctx.strokeStyle = '#6a9a6a';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.fillRect(plot.pos.x - plot.size / 2, plot.pos.y - plot.size / 2, plot.size, plot.size);
+      ctx.strokeRect(plot.pos.x - plot.size / 2, plot.pos.y - plot.size / 2, plot.size, plot.size);
+      ctx.setLineDash([]);
 
-    // Fruit indicator
-    if (source.ready) {
-      ctx.font = '20px serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(FRUIT_EMOJI[source.type], source.pos.x, source.pos.y - 8);
-    } else {
-      // Growth bar
-      const progress = source.growTimer / source.maxGrow;
+      // Cost label
       ctx.fillStyle = '#333';
-      ctx.fillRect(source.pos.x - 15, source.pos.y + 18, 30, 5);
-      ctx.fillStyle = '#4CAF50';
-      ctx.fillRect(source.pos.x - 15, source.pos.y + 18, 30 * progress, 5);
-    }
+      ctx.font = 'bold 12px Fredoka, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`$${plot.cost}`, plot.pos.x, plot.pos.y - 5);
+      ctx.font = '16px serif';
+      ctx.fillText(plot.type ? FRUIT_EMOJI[plot.type] : '🌱', plot.pos.x, plot.pos.y + 14);
+      ctx.fillStyle = '#555';
+      ctx.font = '9px Nunito, sans-serif';
+      ctx.fillText('PRESS E/SPACE', plot.pos.x, plot.pos.y + 28);
+    } else {
+      // Purchased plot - tree
+      ctx.fillStyle = '#8B4513';
+      ctx.fillRect(plot.pos.x - 6, plot.pos.y - 5, 12, 20);
+      ctx.fillStyle = plot.ready ? '#2d8a2d' : '#5a7a5a';
+      ctx.beginPath();
+      ctx.arc(plot.pos.x, plot.pos.y - 15, plot.size / 2.5, 0, Math.PI * 2);
+      ctx.fill();
 
-    // Label
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 11px Nunito, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(source.type.toUpperCase(), source.pos.x, source.pos.y + 35);
+      if (plot.ready && plot.type) {
+        ctx.font = '20px serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(FRUIT_EMOJI[plot.type], plot.pos.x, plot.pos.y - 8);
+      } else {
+        const progress = plot.growTimer / plot.maxGrow;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(plot.pos.x - 15, plot.pos.y + 18, 30, 5);
+        ctx.fillStyle = '#4CAF50';
+        ctx.fillRect(plot.pos.x - 15, plot.pos.y + 18, 30 * progress, 5);
+      }
+
+      if (plot.type) {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px Nunito, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(plot.type.toUpperCase(), plot.pos.x, plot.pos.y + 35);
+      }
+    }
   }
 
   // Draw shelves
   for (const shelf of state.shelves) {
-    // Shelf body
     ctx.fillStyle = '#a0744a';
     const sw = shelf.size;
     const sh = shelf.size * 0.7;
     ctx.fillRect(shelf.pos.x - sw / 2, shelf.pos.y - sh / 2, sw, sh);
-    
-    // Shelf top
     ctx.fillStyle = '#c09060';
     ctx.fillRect(shelf.pos.x - sw / 2 - 3, shelf.pos.y - sh / 2 - 4, sw + 6, 8);
 
-    // Stock display
     if (shelf.type) {
       const emoji = FRUIT_EMOJI[shelf.type];
       ctx.font = '14px serif';
@@ -93,26 +111,37 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     }
   }
 
+  // Draw cashier
+  const cash = state.cashier;
+  ctx.fillStyle = '#6a5a4a';
+  ctx.fillRect(cash.pos.x - cash.size / 2, cash.pos.y - cash.size / 2.5, cash.size, cash.size * 0.5);
+  ctx.fillStyle = '#8a7a6a';
+  ctx.fillRect(cash.pos.x - cash.size / 2 - 3, cash.pos.y - cash.size / 2.5 - 4, cash.size + 6, 8);
+  ctx.font = '20px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('💵', cash.pos.x, cash.pos.y + 2);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 10px Fredoka, sans-serif';
+  ctx.fillText('CASHIER', cash.pos.x, cash.pos.y + cash.size / 2.5 + 14);
+
   // Draw customers
   for (const customer of state.customers) {
     const alpha = customer.leaving && !customer.served ? 0.5 : 1;
     ctx.globalAlpha = alpha;
 
-    // Body
     ctx.fillStyle = '#d4a574';
     ctx.beginPath();
     ctx.arc(customer.pos.x, customer.pos.y, customer.size / 2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Face
     ctx.fillStyle = '#333';
     ctx.beginPath();
     ctx.arc(customer.pos.x - 4, customer.pos.y - 3, 2, 0, Math.PI * 2);
     ctx.arc(customer.pos.x + 4, customer.pos.y - 3, 2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Want bubble
     if (!customer.served && !customer.leaving) {
+      // Want bubble
       ctx.fillStyle = 'rgba(255,255,255,0.9)';
       ctx.beginPath();
       ctx.arc(customer.pos.x + 16, customer.pos.y - 20, 12, 0, Math.PI * 2);
@@ -129,6 +158,11 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
       ctx.fillRect(customer.pos.x - 12, customer.pos.y + 16, 24 * ratio, 3);
     }
 
+    if (customer.atCashier && !customer.served) {
+      ctx.font = '12px serif';
+      ctx.fillText('⏳', customer.pos.x, customer.pos.y - 18);
+    }
+
     if (customer.served) {
       ctx.font = '14px serif';
       ctx.fillText('💰', customer.pos.x, customer.pos.y - 18);
@@ -137,8 +171,10 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     ctx.globalAlpha = 1;
   }
 
-  // Draw players (monkeys!)
+  // Draw players
   for (const player of state.players) {
+    const bodyColor = PLAYER_BODY_COLORS[player.id - 1] || PLAYER_BODY_COLORS[0];
+
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.15)';
     ctx.beginPath();
@@ -146,7 +182,7 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     ctx.fill();
 
     // Body
-    ctx.fillStyle = player.id === 1 ? '#8B5E3C' : '#6B4226';
+    ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(player.pos.x, player.pos.y, player.size / 2, 0, Math.PI * 2);
     ctx.fill();
@@ -174,7 +210,6 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     ctx.arc(player.pos.x - 5, player.pos.y - 3, 2.5, 0, Math.PI * 2);
     ctx.arc(player.pos.x + 5, player.pos.y - 3, 2.5, 0, Math.PI * 2);
     ctx.fill();
-    // Eye shine
     ctx.fillStyle = '#fff';
     ctx.beginPath();
     ctx.arc(player.pos.x - 4, player.pos.y - 4, 1, 0, Math.PI * 2);
@@ -188,7 +223,7 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     ctx.arc(player.pos.x, player.pos.y + 3, 4, 0.1 * Math.PI, 0.9 * Math.PI);
     ctx.stroke();
 
-    // Player indicator ring
+    // Player ring
     ctx.strokeStyle = player.color;
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -199,12 +234,20 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     ctx.fillStyle = player.color;
     ctx.font = 'bold 11px Fredoka, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`P${player.id}`, player.pos.x, player.pos.y - player.size / 2 - 10);
+    ctx.fillText(player.name, player.pos.x, player.pos.y - player.size / 2 - 10);
 
-    // Carrying indicator
+    // Carrying
     if (player.carrying) {
       ctx.font = '16px serif';
-      ctx.fillText(FRUIT_EMOJI[player.carrying], player.pos.x, player.pos.y - player.size / 2 - 20);
+      ctx.fillText(FRUIT_EMOJI[player.carrying], player.pos.x, player.pos.y - player.size / 2 - 22);
     }
   }
+
+  // Money HUD on canvas
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(CANVAS_WIDTH - 130, 10, 120, 35);
+  ctx.fillStyle = '#f0d040';
+  ctx.font = 'bold 18px Fredoka, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(`💰 $${state.money}`, CANVAS_WIDTH - 20, 34);
 }
