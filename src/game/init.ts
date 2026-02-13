@@ -1,56 +1,71 @@
-import { GameState, FruitSource, Shelf, Player } from './types';
+import { GameState, Plot, Shelf, Player, Cashier } from './types';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, PLAYER_SIZE, PLAYER_SPEED,
-  FRUIT_SOURCE_SIZE, SHELF_SIZE, FRUIT_GROW_TIME, SHELF_MAX_STOCK,
-  CUSTOMER_SPAWN_INTERVAL,
+  PLOT_SIZE, SHELF_SIZE, CASHIER_SIZE, FRUIT_GROW_TIME,
+  SHELF_MAX_STOCK, CUSTOMER_SPAWN_INTERVAL, PLOT_COSTS,
+  PLAYER_COLORS,
 } from './constants';
 
-export function createInitialState(): GameState {
-  const p1: Player = {
-    id: 1,
-    pos: { x: 200, y: CANVAS_HEIGHT / 2 },
+export function createPlayer(id: number, name: string): Player {
+  const startPositions = [
+    { x: 200, y: CANVAS_HEIGHT / 2 },
+    { x: CANVAS_WIDTH - 200, y: CANVAS_HEIGHT / 2 },
+    { x: 200, y: CANVAS_HEIGHT / 2 - 100 },
+    { x: CANVAS_WIDTH - 200, y: CANVAS_HEIGHT / 2 - 100 },
+  ];
+  return {
+    id,
+    pos: startPositions[id - 1] || startPositions[0],
     carrying: null,
-    money: 0,
     speed: PLAYER_SPEED,
     size: PLAYER_SIZE,
-    color: '#4a9eed',
-    name: 'Player 1',
+    color: PLAYER_COLORS[id - 1] || PLAYER_COLORS[0],
+    name,
   };
+}
 
-  const p2: Player = {
-    id: 2,
-    pos: { x: CANVAS_WIDTH - 200, y: CANVAS_HEIGHT / 2 },
-    carrying: null,
-    money: 0,
-    speed: PLAYER_SPEED,
-    size: PLAYER_SIZE,
-    color: '#ed4a7a',
-    name: 'Player 2',
-  };
+export function createInitialState(playerCount: number = 1, playerNames: string[] = ['Player 1']): GameState {
+  const players: Player[] = [];
+  for (let i = 0; i < playerCount; i++) {
+    players.push(createPlayer(i + 1, playerNames[i] || `Player ${i + 1}`));
+  }
 
-  const fruitSources: FruitSource[] = [
-    { pos: { x: 80, y: 100 }, type: 'banana', growTimer: 0, maxGrow: FRUIT_GROW_TIME, ready: true, size: FRUIT_SOURCE_SIZE },
-    { pos: { x: 80, y: 280 }, type: 'apple', growTimer: 0, maxGrow: FRUIT_GROW_TIME, ready: true, size: FRUIT_SOURCE_SIZE },
-    { pos: { x: 80, y: 460 }, type: 'orange', growTimer: 0, maxGrow: FRUIT_GROW_TIME, ready: true, size: FRUIT_SOURCE_SIZE },
+  // Plots - some purchased (starter), some buyable
+  const plots: Plot[] = [
+    // Starter plot (free, already has banana)
+    { pos: { x: 80, y: 180 }, type: 'banana', growTimer: 0, maxGrow: FRUIT_GROW_TIME, ready: true, size: PLOT_SIZE, cost: 0, purchased: true },
+    // Buyable plots
+    { pos: { x: 80, y: 320 }, type: 'apple', growTimer: 0, maxGrow: FRUIT_GROW_TIME, ready: false, size: PLOT_SIZE, cost: PLOT_COSTS.apple, purchased: false },
+    { pos: { x: 80, y: 460 }, type: 'orange', growTimer: 0, maxGrow: FRUIT_GROW_TIME, ready: false, size: PLOT_SIZE, cost: PLOT_COSTS.orange, purchased: false },
+    { pos: { x: 880, y: 180 }, type: 'banana', growTimer: 0, maxGrow: FRUIT_GROW_TIME, ready: false, size: PLOT_SIZE, cost: PLOT_COSTS.banana, purchased: false },
+    { pos: { x: 880, y: 320 }, type: 'apple', growTimer: 0, maxGrow: FRUIT_GROW_TIME, ready: false, size: PLOT_SIZE, cost: PLOT_COSTS.apple, purchased: false },
+    { pos: { x: 880, y: 460 }, type: 'orange', growTimer: 0, maxGrow: FRUIT_GROW_TIME, ready: false, size: PLOT_SIZE, cost: PLOT_COSTS.orange, purchased: false },
   ];
 
   const shelves: Shelf[] = [
-    { pos: { x: CANVAS_WIDTH / 2 - 120, y: 120 }, type: null, stock: 0, maxStock: SHELF_MAX_STOCK, size: SHELF_SIZE },
-    { pos: { x: CANVAS_WIDTH / 2, y: 120 }, type: null, stock: 0, maxStock: SHELF_MAX_STOCK, size: SHELF_SIZE },
-    { pos: { x: CANVAS_WIDTH / 2 + 120, y: 120 }, type: null, stock: 0, maxStock: SHELF_MAX_STOCK, size: SHELF_SIZE },
-    { pos: { x: CANVAS_WIDTH / 2 - 120, y: 520 }, type: null, stock: 0, maxStock: SHELF_MAX_STOCK, size: SHELF_SIZE },
-    { pos: { x: CANVAS_WIDTH / 2, y: 520 }, type: null, stock: 0, maxStock: SHELF_MAX_STOCK, size: SHELF_SIZE },
-    { pos: { x: CANVAS_WIDTH / 2 + 120, y: 520 }, type: null, stock: 0, maxStock: SHELF_MAX_STOCK, size: SHELF_SIZE },
+    { pos: { x: CANVAS_WIDTH / 2 - 120, y: 150 }, type: null, stock: 0, maxStock: SHELF_MAX_STOCK, size: SHELF_SIZE },
+    { pos: { x: CANVAS_WIDTH / 2, y: 150 }, type: null, stock: 0, maxStock: SHELF_MAX_STOCK, size: SHELF_SIZE },
+    { pos: { x: CANVAS_WIDTH / 2 + 120, y: 150 }, type: null, stock: 0, maxStock: SHELF_MAX_STOCK, size: SHELF_SIZE },
+    { pos: { x: CANVAS_WIDTH / 2 - 120, y: 350 }, type: null, stock: 0, maxStock: SHELF_MAX_STOCK, size: SHELF_SIZE },
+    { pos: { x: CANVAS_WIDTH / 2, y: 350 }, type: null, stock: 0, maxStock: SHELF_MAX_STOCK, size: SHELF_SIZE },
+    { pos: { x: CANVAS_WIDTH / 2 + 120, y: 350 }, type: null, stock: 0, maxStock: SHELF_MAX_STOCK, size: SHELF_SIZE },
   ];
 
+  const cashier: Cashier = {
+    pos: { x: CANVAS_WIDTH / 2, y: 540 },
+    size: CASHIER_SIZE,
+  };
+
   return {
-    players: [p1, p2],
-    fruitSources,
+    players,
+    plots,
     shelves,
+    cashier,
     customers: [],
     customerTimer: 0,
     customerInterval: CUSTOMER_SPAWN_INTERVAL,
     gameTime: 0,
     paused: false,
+    money: 0,
   };
 }

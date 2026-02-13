@@ -1,17 +1,24 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
-import { GameState, Keys } from '@/game/types';
+import { GameState, Keys, PlayerInput } from '@/game/types';
 import { createInitialState } from '@/game/init';
 import { updateGame } from '@/game/logic';
 import { renderGame } from '@/game/renderer';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '@/game/constants';
+import { MultiplayerManager } from '@/game/multiplayer';
 
-export default function GameCanvas() {
+interface GameCanvasProps {
+  multiplayer: MultiplayerManager;
+  playerCount: number;
+  playerNames: string[];
+}
+
+export default function GameCanvas({ multiplayer, playerCount, playerNames }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stateRef = useRef<GameState>(createInitialState());
+  const stateRef = useRef<GameState>(createInitialState(playerCount, playerNames));
   const keysRef = useRef<Keys>({});
   const rafRef = useRef<number>(0);
-  const [scores, setScores] = useState([0, 0]);
-  const [carrying, setCarrying] = useState<(string | null)[]>([null, null]);
+  const remoteInputsRef = useRef<Map<number, PlayerInput>>(new Map());
+  const [money, setMoney] = useState(0);
 
   const gameLoop = useCallback(() => {
     const state = stateRef.current;
@@ -20,33 +27,86 @@ export default function GameCanvas() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    updateGame(state, keysRef.current);
+    if (multiplayer.isHost) {
+      // Build inputs from local keys + remote inputs
+      const localInput: PlayerInput = {
+        playerId: multiplayer.playerId,
+        keys: {
+          up: !!keysRef.current['w'] || !!keysRef.current['W'],
+          down: !!keysRef.current['s'] || !!keysRef.current['S'],
+          left: !!keysRef.current['a'] || !!keysRef.current['A'],
+          right: !!keysRef.current['d'] || !!keysRef.current['D'],
+          interact: !!keysRef.current['e'] || !!keysRef.current['E'] || !!keysRef.current[' '],
+        },
+      };
+
+      const allInputs: PlayerInput[] = [localInput];
+      remoteInputsRef.current.forEach(input => allInputs.push(input));
+
+      updateGame(state, allInputs);
+
+      // Broadcast state to other players (throttled)
+      if (state.gameTime % 2 === 0) {
+        multiplayer.broadcastState(state);
+      }
+    }
+
     renderGame(ctx, state);
 
-    // Update React state for HUD (throttled)
     if (state.gameTime % 10 === 0) {
-      setScores([state.players[0].money, state.players[1].money]);
-      setCarrying([state.players[0].carrying, state.players[1].carrying]);
+      setMoney(state.money);
     }
 
     rafRef.current = requestAnimationFrame(gameLoop);
-  }, []);
+  }, [multiplayer]);
 
   useEffect(() => {
+    // Host: receive remote inputs
+    if (multiplayer.isHost) {
+      multiplayer.onPlayerInput = (input: PlayerInput) => {
+        remoteInputsRef.current.set(input.playerId, input);
+      };
+    } else {
+      // Client: receive state updates
+      multiplayer.onStateUpdate = (state: GameState) => {
+        stateRef.current = state;
+      };
+    }
+
     const handleKeyDown = (e: KeyboardEvent) => {
       keysRef.current[e.key] = true;
-      // Prevent scrolling with arrow keys
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
         e.preventDefault();
+      }
+
+      // Non-host: send inputs
+      if (!multiplayer.isHost) {
+        sendInput();
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       keysRef.current[e.key] = false;
+      if (!multiplayer.isHost) {
+        sendInput();
+      }
     };
+
+    function sendInput() {
+      const input: PlayerInput = {
+        playerId: multiplayer.playerId,
+        keys: {
+          up: !!keysRef.current['w'] || !!keysRef.current['W'],
+          down: !!keysRef.current['s'] || !!keysRef.current['S'],
+          left: !!keysRef.current['a'] || !!keysRef.current['A'],
+          right: !!keysRef.current['d'] || !!keysRef.current['D'],
+          interact: !!keysRef.current['e'] || !!keysRef.current['E'] || !!keysRef.current[' '],
+        },
+      };
+      multiplayer.sendInput(input);
+    }
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-
     rafRef.current = requestAnimationFrame(gameLoop);
 
     return () => {
@@ -54,45 +114,19 @@ export default function GameCanvas() {
       window.removeEventListener('keyup', handleKeyUp);
       cancelAnimationFrame(rafRef.current);
     };
-  }, [gameLoop]);
-
-  const resetGame = () => {
-    stateRef.current = createInitialState();
-    setScores([0, 0]);
-    setCarrying([null, null]);
-  };
+  }, [gameLoop, multiplayer]);
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      {/* HUD */}
-      <div className="flex w-full max-w-[960px] justify-between items-center px-2">
-        <div className="flex items-center gap-3 bg-game-p1/20 border-2 border-game-p1 rounded-xl px-4 py-2">
-          <span className="text-2xl">🐒</span>
-          <div>
-            <div className="font-display font-bold text-sm" style={{ color: '#4a9eed' }}>Player 1</div>
-            <div className="font-display font-bold text-xl text-foreground">💰 ${scores[0]}</div>
-          </div>
-          {carrying[0] && <span className="text-lg ml-1">📦{carrying[0] === 'banana' ? '🍌' : carrying[0] === 'apple' ? '🍎' : '🍊'}</span>}
-        </div>
-
-        <button
-          onClick={resetGame}
-          className="bg-primary hover:bg-primary/80 text-primary-foreground font-display font-bold px-5 py-2 rounded-xl transition-colors text-sm"
-        >
-          🔄 Restart
-        </button>
-
-        <div className="flex items-center gap-3 bg-game-p2/20 border-2 border-game-p2 rounded-xl px-4 py-2">
-          {carrying[1] && <span className="text-lg mr-1">📦{carrying[1] === 'banana' ? '🍌' : carrying[1] === 'apple' ? '🍎' : '🍊'}</span>}
-          <div className="text-right">
-            <div className="font-display font-bold text-sm" style={{ color: '#ed4a7a' }}>Player 2</div>
-            <div className="font-display font-bold text-xl text-foreground">💰 ${scores[1]}</div>
-          </div>
-          <span className="text-2xl">🐒</span>
-        </div>
+    <div className="flex flex-col items-center gap-3">
+      <div className="flex items-center gap-4 text-sm font-body">
+        <span className="bg-card border border-border rounded-xl px-3 py-1.5 font-display font-bold">
+          💰 ${money}
+        </span>
+        <span className="text-muted-foreground">
+          Room: <span className="font-mono font-bold text-primary">{multiplayer.roomCode}</span>
+        </span>
       </div>
 
-      {/* Canvas */}
       <canvas
         ref={canvasRef}
         width={CANVAS_WIDTH}
@@ -101,31 +135,18 @@ export default function GameCanvas() {
         style={{ imageRendering: 'auto', maxWidth: '100%' }}
       />
 
-      {/* Controls */}
-      <div className="flex gap-8 text-sm font-body">
-        <div className="bg-card rounded-xl px-4 py-2 border border-border">
-          <span className="font-display font-bold" style={{ color: '#4a9eed' }}>P1:</span>
-          <span className="ml-2 text-muted-foreground">
-            <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">W</kbd>
-            <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono ml-1">A</kbd>
-            <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono ml-1">S</kbd>
-            <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono ml-1">D</kbd>
-          </span>
-        </div>
-        <div className="bg-card rounded-xl px-4 py-2 border border-border">
-          <span className="font-display font-bold" style={{ color: '#ed4a7a' }}>P2:</span>
-          <span className="ml-2 text-muted-foreground">
-            <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">↑</kbd>
-            <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono ml-1">←</kbd>
-            <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono ml-1">↓</kbd>
-            <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono ml-1">→</kbd>
-          </span>
-        </div>
+      <div className="flex gap-4 text-xs font-body text-muted-foreground">
+        <span>
+          <kbd className="bg-muted px-1.5 py-0.5 rounded font-mono">WASD</kbd> move
+        </span>
+        <span>
+          <kbd className="bg-muted px-1.5 py-0.5 rounded font-mono">E</kbd> / <kbd className="bg-muted px-1.5 py-0.5 rounded font-mono">Space</kbd> buy plot
+        </span>
       </div>
 
       <p className="text-muted-foreground text-xs max-w-md text-center">
-        Walk near fruit trees to pick fruit automatically, then walk to shelves to stock them.
-        Customers will come buy from stocked shelves!
+        Walk near trees to pick fruit, stock shelves, and stand at the cashier to check out customers. 
+        Buy new plots with shared earnings!
       </p>
     </div>
   );
