@@ -27,6 +27,8 @@ export default function GameCanvas({ multiplayer, playerCount, playerNames }: Ga
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    if (!multiplayer) return;
+
     if (multiplayer.isHost) {
       // Build inputs from local keys + remote inputs
       const localInput: PlayerInput = {
@@ -61,7 +63,8 @@ export default function GameCanvas({ multiplayer, playerCount, playerNames }: Ga
   }, [multiplayer]);
 
   useEffect(() => {
-    // Host: receive remote inputs
+    if (!multiplayer) return;
+    
     if (multiplayer.isHost) {
       multiplayer.onPlayerInput = (input: PlayerInput) => {
         remoteInputsRef.current.set(input.playerId, input);
@@ -123,7 +126,7 @@ export default function GameCanvas({ multiplayer, playerCount, playerNames }: Ga
           💰 ${money}
         </span>
         <span className="text-muted-foreground">
-          Room: <span className="font-mono font-bold text-primary">{multiplayer.roomCode}</span>
+          Room: <span className="font-mono font-bold text-primary">{multiplayer?.roomCode ?? '...'}</span>
         </span>
       </div>
 
