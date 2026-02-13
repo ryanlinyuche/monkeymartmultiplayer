@@ -1,7 +1,7 @@
 import { GameState, PlayerInput, Customer, FruitType, Position } from './types';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, INTERACTION_DISTANCE, CUSTOMER_SIZE,
-  CUSTOMER_SPEED, CUSTOMER_PATIENCE, FRUIT_PRICES, PLOT_COSTS,
+  CUSTOMER_SPEED, FRUIT_PRICES, PLOT_COSTS,
 } from './constants';
 
 function dist(a: Position, b: Position): number {
@@ -26,8 +26,6 @@ function spawnCustomer(state: GameState) {
     served: false,
     leaving: false,
     atCashier: false,
-    patience: CUSTOMER_PATIENCE,
-    maxPatience: CUSTOMER_PATIENCE,
     speed: CUSTOMER_SPEED,
     size: CUSTOMER_SIZE,
   };
@@ -56,9 +54,8 @@ export function updateGame(state: GameState, inputs: PlayerInput[]): GameState {
     player.pos.x = clamp(player.pos.x + dx, player.size, CANVAS_WIDTH - player.size);
     player.pos.y = clamp(player.pos.y + dy, player.size, CANVAS_HEIGHT - player.size);
 
-    // Interact button pressed
+    // Interact button pressed - buy plots
     if (input.keys.interact) {
-      // Buy unpurchased plots
       for (const plot of state.plots) {
         if (!plot.purchased && dist(player.pos, plot.pos) < INTERACTION_DISTANCE) {
           if (state.money >= plot.cost) {
@@ -120,7 +117,7 @@ export function updateGame(state: GameState, inputs: PlayerInput[]): GameState {
     p => dist(p.pos, state.cashier.pos) < INTERACTION_DISTANCE
   );
 
-  // Update customers
+  // Update customers (NO patience/time limit — they wait forever)
   for (let i = state.customers.length - 1; i >= 0; i--) {
     const c = state.customers[i];
 
@@ -132,14 +129,7 @@ export function updateGame(state: GameState, inputs: PlayerInput[]): GameState {
       continue;
     }
 
-    c.patience--;
-    if (c.patience <= 0) {
-      c.leaving = true;
-      continue;
-    }
-
     if (c.atCashier) {
-      // Waiting at cashier for a player
       if (playerAtCashier) {
         state.money += FRUIT_PRICES[c.wants];
         c.served = true;
@@ -150,7 +140,7 @@ export function updateGame(state: GameState, inputs: PlayerInput[]): GameState {
 
     // Move toward target shelf
     const shelf = state.shelves[c.targetShelf];
-    if (shelf) {
+    if (shelf && c.targetShelf >= 0) {
       const d = dist(c.pos, shelf.pos);
       if (d > INTERACTION_DISTANCE) {
         const ddx = (shelf.pos.x - c.pos.x) / d;
@@ -158,23 +148,21 @@ export function updateGame(state: GameState, inputs: PlayerInput[]): GameState {
         c.pos.x += ddx * c.speed;
         c.pos.y += ddy * c.speed;
       } else {
-        // Try to buy from shelf
         if (shelf.type === c.wants && shelf.stock > 0) {
           shelf.stock--;
           if (shelf.stock === 0) shelf.type = null;
-          // Now go to cashier
-          c.atCashier = false; // will move to cashier
-          c.targetShelf = -1; // signal: heading to cashier
+          c.targetShelf = -1; // head to cashier
         } else {
           const altIdx = state.shelves.findIndex((s, idx) => idx !== c.targetShelf && s.type === c.wants && s.stock > 0);
           if (altIdx >= 0) {
             c.targetShelf = altIdx;
           }
+          // Otherwise just wait at shelf
         }
       }
     }
 
-    // If targetShelf is -1, move to cashier
+    // Moving to cashier
     if (c.targetShelf === -1 && !c.atCashier) {
       const d = dist(c.pos, state.cashier.pos);
       if (d > INTERACTION_DISTANCE) {

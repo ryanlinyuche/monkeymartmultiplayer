@@ -6,6 +6,9 @@ import { renderGame } from '@/game/renderer';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '@/game/constants';
 import { MultiplayerManager } from '@/game/multiplayer';
 
+const DISPLAY_WIDTH = 960;
+const DISPLAY_HEIGHT = 640;
+
 interface GameCanvasProps {
   multiplayer: MultiplayerManager;
   playerCount: number;
@@ -23,14 +26,11 @@ export default function GameCanvas({ multiplayer, playerCount, playerNames }: Ga
   const gameLoop = useCallback(() => {
     const state = stateRef.current;
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !multiplayer) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    if (!multiplayer) return;
-
     if (multiplayer.isHost) {
-      // Build inputs from local keys + remote inputs
       const localInput: PlayerInput = {
         playerId: multiplayer.playerId,
         keys: {
@@ -47,13 +47,12 @@ export default function GameCanvas({ multiplayer, playerCount, playerNames }: Ga
 
       updateGame(state, allInputs);
 
-      // Broadcast state to other players (throttled)
       if (state.gameTime % 2 === 0) {
         multiplayer.broadcastState(state);
       }
     }
 
-    renderGame(ctx, state);
+    renderGame(ctx, state, multiplayer.playerId || 1);
 
     if (state.gameTime % 10 === 0) {
       setMoney(state.money);
@@ -64,13 +63,12 @@ export default function GameCanvas({ multiplayer, playerCount, playerNames }: Ga
 
   useEffect(() => {
     if (!multiplayer) return;
-    
+
     if (multiplayer.isHost) {
       multiplayer.onPlayerInput = (input: PlayerInput) => {
         remoteInputsRef.current.set(input.playerId, input);
       };
     } else {
-      // Client: receive state updates
       multiplayer.onStateUpdate = (state: GameState) => {
         stateRef.current = state;
       };
@@ -81,21 +79,15 @@ export default function GameCanvas({ multiplayer, playerCount, playerNames }: Ga
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
         e.preventDefault();
       }
-
-      // Non-host: send inputs
-      if (!multiplayer.isHost) {
-        sendInput();
-      }
+      if (!multiplayer.isHost) sendInput();
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       keysRef.current[e.key] = false;
-      if (!multiplayer.isHost) {
-        sendInput();
-      }
+      if (!multiplayer.isHost) sendInput();
     };
 
     function sendInput() {
-      const input: PlayerInput = {
+      multiplayer.sendInput({
         playerId: multiplayer.playerId,
         keys: {
           up: !!keysRef.current['w'] || !!keysRef.current['W'],
@@ -104,8 +96,7 @@ export default function GameCanvas({ multiplayer, playerCount, playerNames }: Ga
           right: !!keysRef.current['d'] || !!keysRef.current['D'],
           interact: !!keysRef.current['e'] || !!keysRef.current['E'] || !!keysRef.current[' '],
         },
-      };
-      multiplayer.sendInput(input);
+      });
     }
 
     window.addEventListener('keydown', handleKeyDown);
@@ -132,8 +123,8 @@ export default function GameCanvas({ multiplayer, playerCount, playerNames }: Ga
 
       <canvas
         ref={canvasRef}
-        width={CANVAS_WIDTH}
-        height={CANVAS_HEIGHT}
+        width={DISPLAY_WIDTH}
+        height={DISPLAY_HEIGHT}
         className="rounded-2xl border-4 border-game-shelf shadow-2xl"
         style={{ imageRendering: 'auto', maxWidth: '100%' }}
       />
@@ -148,8 +139,7 @@ export default function GameCanvas({ multiplayer, playerCount, playerNames }: Ga
       </div>
 
       <p className="text-muted-foreground text-xs max-w-md text-center">
-        Walk near trees to pick fruit, stock shelves, and stand at the cashier to check out customers. 
-        Buy new plots with shared earnings!
+        Walk near trees to pick fruit, stock shelves, and stand at the cashier to check out customers!
       </p>
     </div>
   );

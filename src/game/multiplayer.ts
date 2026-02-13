@@ -28,18 +28,24 @@ export interface MultiplayerManager {
 
 export function createRoom(playerName: string): MultiplayerManager {
   const roomCode = generateRoomCode();
-  return joinRoom(roomCode, playerName, true);
+  return setupChannel(roomCode, playerName, true);
 }
 
-export function joinRoom(roomCode: string, playerName: string, isHost: boolean = false): MultiplayerManager {
+export function joinRoom(roomCode: string, playerName: string): MultiplayerManager {
+  return setupChannel(roomCode, playerName, false);
+}
+
+function setupChannel(roomCode: string, playerName: string, isHost: boolean): MultiplayerManager {
   const channel = supabase.channel(`game:${roomCode}`, {
     config: { broadcast: { self: false } },
   });
 
+  let nextId = 2; // host uses this to assign IDs
+
   const manager: MultiplayerManager = {
     channel,
     roomCode,
-    playerId: isHost ? 1 : 0, // will be assigned by host
+    playerId: isHost ? 1 : 0,
     isHost,
     onStateUpdate: null,
     onPlayerInput: null,
@@ -49,28 +55,17 @@ export function joinRoom(roomCode: string, playerName: string, isHost: boolean =
       channel.unsubscribe();
     },
     broadcastState: (state: GameState) => {
-      channel.send({
-        type: 'broadcast',
-        event: 'game_state',
-        payload: { state },
-      });
+      channel.send({ type: 'broadcast', event: 'game_state', payload: { state } });
     },
     sendInput: (input: PlayerInput) => {
-      channel.send({
-        type: 'broadcast',
-        event: 'player_input',
-        payload: { input },
-      });
+      channel.send({ type: 'broadcast', event: 'player_input', payload: { input } });
     },
     startGame: () => {
-      channel.send({
-        type: 'broadcast',
-        event: 'game_start',
-        payload: {},
-      });
+      channel.send({ type: 'broadcast', event: 'game_start', payload: {} });
     },
   };
 
+  // Register ALL listeners before subscribing to avoid race conditions
   channel
     .on('broadcast', { event: 'game_state' }, ({ payload }) => {
       if (manager.onStateUpdate && payload.state) {
@@ -83,18 +78,35 @@ export function joinRoom(roomCode: string, playerName: string, isHost: boolean =
       }
     })
     .on('broadcast', { event: 'game_start' }, () => {
-      if (manager.onGameStart) {
-        manager.onGameStart();
-      }
-    })
-    .on('broadcast', { event: 'player_joined' }, ({ payload }) => {
-      if (manager.onPlayersChanged && payload.players) {
-        manager.onPlayersChanged(payload.players);
-      }
+      if (manager.onGameStart) manager.onGameStart();
     })
     .on('broadcast', { event: 'assign_id' }, ({ payload }) => {
       if (!isHost && payload.playerId) {
         manager.playerId = payload.playerId;
+        console.log('[MP] Assigned player ID:', payload.playerId);
+      }
+    })
+    .on('broadcast', { event: 'request_id' }, ({ payload }) => {
+      if (isHost) {
+        const assignedId = nextId++;
+        console.log('[MP] Host assigning ID', assignedId, 'to', payload.name);
+        channel.send({
+          type: 'broadcast',
+          event: 'assign_id',
+          payload: { playerId: assignedId, name: payload.name },
+        });
+        // Also broadcast updated presence
+        setTimeout(() => {
+          const presenceState = channel.presenceState();
+          const players: { id: number; name: string }[] = [];
+          for (const key in presenceState) {
+            const entries = presenceState[key] as any[];
+            for (const entry of entries) {
+              players.push({ id: entry.playerId || assignedId, name: entry.playerName });
+            }
+          }
+          if (manager.onPlayersChanged) manager.onPlayersChanged(players);
+        }, 500);
       }
     })
     .on('presence', { event: 'sync' }, () => {
@@ -106,40 +118,31 @@ export function joinRoom(roomCode: string, playerName: string, isHost: boolean =
           players.push({ id: entry.playerId, name: entry.playerName });
         }
       }
-      if (manager.onPlayersChanged) {
-        manager.onPlayersChanged(players);
-      }
-    })
-    .subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await channel.track({
-          playerId: isHost ? 1 : 0,
-          playerName: playerName,
-        });
+      console.log('[MP] Presence sync:', players);
+      if (manager.onPlayersChanged) manager.onPlayersChanged(players);
+    });
 
-        if (!isHost) {
-          // Request ID assignment from host
+  // NOW subscribe after all listeners are set up
+  channel.subscribe(async (status) => {
+    console.log('[MP] Channel status:', status);
+    if (status === 'SUBSCRIBED') {
+      await channel.track({
+        playerId: isHost ? 1 : 0,
+        playerName: playerName,
+      });
+
+      if (!isHost) {
+        // Small delay to ensure host listeners are ready
+        setTimeout(() => {
           channel.send({
             type: 'broadcast',
             event: 'request_id',
             payload: { name: playerName },
           });
-        }
+        }, 300);
       }
-    });
-
-  // Host listens for ID requests
-  if (isHost) {
-    let nextId = 2;
-    channel.on('broadcast', { event: 'request_id' }, ({ payload }) => {
-      const assignedId = nextId++;
-      channel.send({
-        type: 'broadcast',
-        event: 'assign_id',
-        payload: { playerId: assignedId, name: payload.name },
-      });
-    });
-  }
+    }
+  });
 
   return manager;
 }
